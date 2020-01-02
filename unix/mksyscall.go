@@ -120,9 +120,14 @@ func main() {
 		endianness = "little-endian"
 	}
 
-	libc := false
-	if goos == "darwin" && (strings.Contains(buildTags(), ",go1.12") || strings.Contains(buildTags(), ",go1.13")) {
+	libc, libcPath := false, ""
+	switch {
+	case goos == "darwin" && (strings.Contains(buildTags(), ",go1.12") || strings.Contains(buildTags(), ",go1.13")):
 		libc = true
+		libcPath = "/usr/lib/libSystem.B.dylib"
+	case goos == "openbsd" && strings.Contains(buildTags(), ",go1.14"):
+		libc = true
+		libcPath = "libc.so.96.0"
 	}
 	trampolines := map[string]bool{}
 
@@ -213,7 +218,7 @@ func main() {
 					text += fmt.Sprintf(" else {\n\t\t_p%d = unsafe.Pointer(&_zero)\n\t}\n", n)
 					args = append(args, fmt.Sprintf("uintptr(_p%d)", n), fmt.Sprintf("uintptr(len(%s))", p.Name))
 					n++
-				} else if p.Type == "int64" && (*openbsd || *netbsd) {
+				} else if p.Type == "int64" && *netbsd {
 					args = append(args, "0")
 					if endianness == "big-endian" {
 						args = append(args, fmt.Sprintf("uintptr(%s>>32)", p.Name), fmt.Sprintf("uintptr(%s)", p.Name))
@@ -371,7 +376,7 @@ func main() {
 				// Assembly trampoline calls the libc_* function, which this magic
 				// redirects to use the function from libSystem.
 				text += fmt.Sprintf("//go:linkname libc_%s libc_%s\n", libcFn, libcFn)
-				text += fmt.Sprintf("//go:cgo_import_dynamic libc_%s %s \"/usr/lib/libSystem.B.dylib\"\n", libcFn, libcFn)
+				text += fmt.Sprintf("//go:cgo_import_dynamic libc_%s %s \"%s\"\n", libcFn, libcFn, libcPath)
 				text += "\n"
 			}
 		}
